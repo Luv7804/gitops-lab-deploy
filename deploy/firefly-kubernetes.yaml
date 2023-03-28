@@ -1,0 +1,255 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chintan-namespace
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: front
+  name: front
+spec:
+  ports:
+    - name: "8080"
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: front
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: db
+  name: db
+spec:
+  ports:
+    - name: "3306"
+      port: 3306
+      targetPort: 3306
+  selector:
+    app: db
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: front
+  name: front
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: front
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      namespace: chintan-namespace
+      labels:
+        app: front
+    spec:
+      containers:
+        - envFrom:
+          - configMapRef:
+              name: env
+          image: fireflyiii/core:latest
+          name: app
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /var/www/html/storage/upload
+              name: firefly-iii-upload
+      restartPolicy: Always
+      volumes:
+        - name: firefly-iii-upload
+          persistentVolumeClaim:
+            claimName: firefly-iii-upload
+
+---
+apiVersion: v1
+data:
+  ALLOW_WEBHOOKS: "false"
+  APP_DEBUG: "false"
+  APP_ENV: local
+  APP_KEY: SomeRandomStringOf32CharsExactly
+  APP_LOG_LEVEL: notice
+  APP_NAME: FireflyIII
+  APP_URL: http://app.chintan
+  AUDIT_LOG_LEVEL: info
+  AUTHENTICATION_GUARD: web
+  AUTHENTICATION_GUARD_HEADER: REMOTE_USER
+  BROADCAST_DRIVER: log
+  CACHE_DRIVER: file
+  CACHE_PREFIX: firefly
+  COOKIE_PATH: /
+  COOKIE_SAMESITE: lax
+  COOKIE_SECURE: "false"
+  DB_CONNECTION: mysql
+  DB_DATABASE: firefly
+  DB_HOST: db
+  DB_PASSWORD: secret_firefly_password
+  DB_PORT: "3306"
+  DB_USERNAME: firefly
+  DEFAULT_LANGUAGE: en_US
+  DEFAULT_LOCALE: equal
+  DISABLE_CSP_HEADER: "false"
+  DISABLE_FRAME_HEADER: "false"
+  DKR_BUILD_LOCALE: "false"
+  DKR_CHECK_SQLITE: "true"
+  DKR_RUN_MIGRATION: "true"
+  DKR_RUN_PASSPORT_INSTALL: "true"
+  DKR_RUN_REPORT: "true"
+  DKR_RUN_UPGRADE: "true"
+  DKR_RUN_VERIFY: "true"
+  ENABLE_EXTERNAL_MAP: "false"
+  ENABLE_EXTERNAL_RATES: "false"
+  FIREFLY_III_LAYOUT: v1
+  IS_HEROKU: "false"
+  LOG_CHANNEL: stack
+  MAIL_ENCRYPTION: "null"
+  MAIL_FROM: changeme@example.com
+  MAIL_HOST: "null"
+  MAIL_MAILER: log
+  MAIL_PASSWORD: "null"
+  MAIL_PORT: "2525"
+  MAIL_USERNAME: "null"
+  MAILGUN_ENDPOINT: api.mailgun.net
+  MAP_DEFAULT_LAT: "51.983333"
+  MAP_DEFAULT_LONG: "5.916667"
+  MAP_DEFAULT_ZOOM: "6"
+  MYSQL_SSL_CAPATH: /etc/ssl/certs/
+  MYSQL_SSL_VERIFY_SERVER_CERT: "true"
+  MYSQL_USE_SSL: "false"
+  PGSQL_SCHEMA: public
+  PGSQL_SSL_CERT: "null"
+  PGSQL_SSL_CRL_FILE: "null"
+  PGSQL_SSL_KEY: "null"
+  PGSQL_SSL_MODE: prefer
+  PGSQL_SSL_ROOT_CERT: "null"
+  QUEUE_DRIVER: sync
+  REDIS_CACHE_DB: "1"
+  REDIS_DB: "0"
+  REDIS_HOST: 127.0.0.1
+  REDIS_PORT: "6379"
+  REDIS_SCHEME: tcp
+  SEND_ERROR_MESSAGE: "true"
+  SEND_REPORT_JOURNALS: "true"
+  SESSION_DRIVER: file
+  SITE_OWNER: mail@example.com
+  TZ: Europe/Amsterdam
+kind: ConfigMap
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: app-env
+  name: env
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: firefly-iii-upload
+  name: firefly-iii-upload
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: db
+  name: db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      namespace: chintan-namespace 
+      labels:
+        app: db
+    spec:
+      containers:
+        - env:
+            - name: MYSQL_DATABASE
+              value: firefly
+            - name: MYSQL_PASSWORD
+              value: secret_firefly_password
+            - name: MYSQL_RANDOM_ROOT_PASSWORD
+              value: "yes"
+            - name: MYSQL_USER
+              value: firefly
+          image: mariadb
+          name: db
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: firefly-iii-db
+      restartPolicy: Always
+      volumes:
+        - name: firefly-iii-db
+          persistentVolumeClaim:
+            claimName: firefly-iii-db
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: chintan-namespace
+  labels:
+    app: firefly-iii-db
+  name: firefly-iii-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: networking.k8s.io/v1
+
+kind: Ingress
+
+metadata:
+  namespace: chintan-namespace
+
+  name: firefly-app
+
+spec:
+
+  ingressClassName: traefik
+
+  rules:
+  - host: "chintan.local"
+    http:
+
+      paths:
+
+      - path: /
+
+        pathType: Prefix
+
+        backend:
+
+          service:
+
+            name: front
+
+            port:
+
+              number: 8080
